@@ -11,4 +11,4 @@ Second parameter use flag '-t' or '--tagname' and hold name of GPX tag, that act
 * `rte` if the points are stored as routes.
 
 ## Using
-`python corrctgpx.py -f <GPX filename>.gpx -t <tag name>`
+`python correctgpx.py -f <GPX filename>.gpx -t <tag name>`
