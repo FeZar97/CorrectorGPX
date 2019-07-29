@@ -11,7 +11,7 @@ THRESHOLD = 20000
 def getDistance(p1, p2):
     return distance( (p1[0], p1[1]), (p2[0], p2[1])).meters
 
-points = []
+points = {}
 
 parser = argparse.ArgumentParser(prog = 'GPX_Orderer', description = 'Program %(prog)s sorts  contents of the input file in GPX format')
 parser.add_argument('-f', '--filename', type=str, required=True, help = 'Name of input file')
@@ -59,6 +59,7 @@ maxGreatCircleDistance = 0.0
     #     maxGreatCircleDistance = great_circle(point, prevPoint).kilometers
     # prevPoint = point
 
+
 # FIND START POINT
 sourcePointList = points.copy()
 
@@ -86,6 +87,10 @@ while isNearestFinded is True:
     # if isNearestFinded is True, then nearest is finded. prevPoint must be equaled to this point and then this point must be removed
     if isNearestFinded is True:
         print('jump from {0} to {1}. dist: {2}'.format(prevPoint, nearestPoint, getDistance(prevPoint, nearestPoint)))
+        gpx_segment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=prevPoint[0], longitude=prevPoint[1]))
+        outFile = open(namespace.filename.replace('.gpx', '') + '_corrected.gpx', 'w')
+        outFile.write(outGpx.to_xml())
+        outFile.close()
         prevPoint = nearestPoint
     # if can`t finding nearest point, its meaning, that we find start point
     else:
@@ -94,7 +99,3 @@ while isNearestFinded is True:
 #print('maxGCDistance = {0} km, maxGDistance = {1} km'.format(maxGreatCircleDistance, maxGeodesicDistance))
 print('startPoint: {0}, length of sourcePointList: {1}, {2}'.format(startPoint, len(sourcePointList), len(points)))
 print('-------------------------------------------------------------------------------')
-
-outFile = open(namespace.filename.replace('.gpx', '') + '_corrected.gpx', 'w')
-outFile.write(outGpx.to_xml())
-outFile.close()
