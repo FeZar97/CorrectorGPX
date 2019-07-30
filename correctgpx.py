@@ -29,6 +29,7 @@ points = []
 parser = argparse.ArgumentParser(prog = 'GPX_Orderer', description = 'Program %(prog)s sorts  contents of the input file in GPX format')
 parser.add_argument('-f', '--filename', type=str, required=True, help = 'Name of input file')
 parser.add_argument('-t', '--tagname', choices=['wpt', 'trk', 'rte'], required=True, type=str, help = 'Source of points')
+parser.add_argument('-ы', '--size', type=int, default=100, help = 'How much percentages of file must be processed')
 
 namespace = parser.parse_args()
 
@@ -135,34 +136,32 @@ for miniSector in miniSectors:
     # on this point starting point for this segment is known
 
     #  sort every sector
-    sortedSector = []
-    prevPoint = startPoint
-    nearestPoint = startPoint
-
-    secLength = len(miniSector)
-    while len(miniSector) > 0:
-
-        # if len(miniSector) % 100 is 0 : print('    {0} points left'.format(len(miniSector)))
-
-        minDistance = DISTANCE_THRESHOLD
-        pointsDistance = DISTANCE_THRESHOLD
-
-        for point in miniSector:
-            pointsDistance = getDistanceInMeters(prevPoint, point)
-            if pointsDistance < minDistance and pointsDistance < DISTANCE_THRESHOLD:
-                minDistance = pointsDistance
-                nearestPoint = point
-
-        sortedSector.append(nearestPoint)
-        if nearestPoint in miniSector:
-            while nearestPoint in miniSector:
-                miniSector.remove(nearestPoint)
-
-        if pointsDistance > DISTANCE_THRESHOLD:
-            miniSector.clear()
-
-    sortedSectors.append(sortedSector)
-    print('    Sector processed successfully')
+    # sortedSector = []
+    # prevPoint = startPoint
+    # nearestPoint = startPoint
+#
+    # secLength = len(miniSector)
+    # while len(miniSector) > 0:
+#
+    #     minDistance = DISTANCE_THRESHOLD
+    #     pointsDistance = DISTANCE_THRESHOLD
+#
+    #     for point in miniSector:
+    #         pointsDistance = getDistanceInMeters(prevPoint, point)
+    #         if pointsDistance < minDistance and pointsDistance < DISTANCE_THRESHOLD:
+    #             minDistance = pointsDistance
+    #             nearestPoint = point
+#
+    #     sortedSector.append(nearestPoint)
+    #     if nearestPoint in miniSector:
+    #         while nearestPoint in miniSector:
+    #             miniSector.remove(nearestPoint)
+#
+    #     if pointsDistance > DISTANCE_THRESHOLD:
+    #         miniSector.clear()
+#
+    # sortedSectors.append(sortedSector)
+    # print('    Sector processed successfully')
 
 #------------------------------------------------------------------------------------------------------
 
@@ -173,6 +172,17 @@ outGpx.tracks.append(gpx_track)
 
 gpx_segment = gpxpy.gpx.GPXTrackSegment()
 gpx_track.segments.append(gpx_segment)
+
+
+for miniSector in miniSectors:
+    gpx_segment.points.clear()
+    for point in miniSector:
+        gpx_segment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=point[0], longitude=point[1]))
+
+    outFile = open('segment'+str(miniSectors.index(miniSector)), 'w')
+    outFile.write(outGpx.to_xml())
+    outFile.close()
+
 
 for sector in sortedSectors:
     for point in sector:
