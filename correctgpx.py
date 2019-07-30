@@ -133,38 +133,6 @@ for miniSector in miniSectors:
        else:
            startPoint = prevPoint
 
-    # on this point starting point for this segment is known
-
-    #  sort every sector
-    # sortedSector = []
-    # prevPoint = startPoint
-    # nearestPoint = startPoint
-#
-    # secLength = len(miniSector)
-    # while len(miniSector) > 0:
-#
-    #     minDistance = DISTANCE_THRESHOLD
-    #     pointsDistance = DISTANCE_THRESHOLD
-#
-    #     for point in miniSector:
-    #         pointsDistance = getDistanceInMeters(prevPoint, point)
-    #         if pointsDistance < minDistance and pointsDistance < DISTANCE_THRESHOLD:
-    #             minDistance = pointsDistance
-    #             nearestPoint = point
-#
-    #     sortedSector.append(nearestPoint)
-    #     if nearestPoint in miniSector:
-    #         while nearestPoint in miniSector:
-    #             miniSector.remove(nearestPoint)
-#
-    #     if pointsDistance > DISTANCE_THRESHOLD:
-    #         miniSector.clear()
-#
-    # sortedSectors.append(sortedSector)
-    # print('    Sector processed successfully')
-
-#------------------------------------------------------------------------------------------------------
-
 outGpx = gpxpy.gpx.GPX()
 
 gpx_track = gpxpy.gpx.GPXTrack()
@@ -173,16 +141,15 @@ outGpx.tracks.append(gpx_track)
 gpx_segment = gpxpy.gpx.GPXTrackSegment()
 gpx_track.segments.append(gpx_segment)
 
-
 for miniSector in miniSectors:
     gpx_segment.points.clear()
     for point in miniSector:
         gpx_segment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=point[0], longitude=point[1]))
 
+    # write segments to file
     outFile = open('segment'+str(miniSectors.index(miniSector)), 'w')
     outFile.write(outGpx.to_xml())
     outFile.close()
-
 
 for sector in sortedSectors:
     for point in sector:
