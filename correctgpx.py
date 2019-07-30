@@ -6,7 +6,7 @@ from geopy.distance import distance
 from gpxpy.gpx import GPXTrackPoint
 
 # max distance between points in meters
-DISTANCE_THRESHOLD = 2000
+DISTANCE_THRESHOLD = 1000
 # points per sector
 PPR = 500
 
@@ -100,7 +100,6 @@ else:
 
         miniSectors.append(sector)
 
-#  sort every sector
 sortedSectors = []
 for miniSector in miniSectors:
     print('sector {0}, {1} points'.format(miniSectors.index(miniSector), len(miniSector)))
@@ -117,7 +116,6 @@ for miniSector in miniSectors:
 
        isNearestFinded = False
        tempSector.remove(prevPoint)
-       # print('now in tempSector {0} elements, in miniSector {1} elements'.format(len(tempSector), len(miniSector)))
        minDistance = DISTANCE_THRESHOLD
 
        # finding nearest point
@@ -135,8 +133,8 @@ for miniSector in miniSectors:
            startPoint = prevPoint
 
     # on this point starting point for this segment is known
-    print('    starting point has been found')
 
+    #  sort every sector
     sortedSector = []
     prevPoint = startPoint
     nearestPoint = startPoint
@@ -144,7 +142,7 @@ for miniSector in miniSectors:
     secLength = len(miniSector)
     while len(miniSector) > 0:
 
-        if len(miniSector) % 100 is 0 : print('    {0} points left'.format(len(miniSector)))
+        # if len(miniSector) % 100 is 0 : print('    {0} points left'.format(len(miniSector)))
 
         minDistance = DISTANCE_THRESHOLD
         pointsDistance = DISTANCE_THRESHOLD
@@ -164,6 +162,7 @@ for miniSector in miniSectors:
             miniSector.clear()
 
     sortedSectors.append(sortedSector)
+    print('    Sector processed successfully')
 
 #------------------------------------------------------------------------------------------------------
 
