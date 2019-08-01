@@ -1,7 +1,7 @@
 import argparse
 import gpxpy.gpx
 import math
-import geopy
+import copy
 from geopy.distance import geodesic
 import gpxpy
 
@@ -83,6 +83,14 @@ someTracks = [] # непрерывные треки
 def distance_in_meters(first_point, second_point):
     return geodesic((first_point.latitude, first_point.longitude), (second_point.latitude, second_point.longitude)).meters
 
+def track_distance(first_track, second_track):
+    first_end_second_start_distance = distance_in_meters( first_track.get_end_point(),   second_track.get_start_point() )
+    second_end_first_start_distance = distance_in_meters( first_track.get_start_point(), second_track.get_end_point()   )
+    return min(first_end_second_start_distance, second_end_first_start_distance)
+
+def is_connectable(first_track, second_track):
+    return track_distance(first_track, second_track) < DISTANCE_THRESHOLD
+
 def get_parser():
     new_parser = argparse.ArgumentParser(prog = 'GPX_Orderer', description = 'Program %(prog)s sorts  contents of the input file in GPX format')
     new_parser.add_argument('-f', '--filename', type=str, help = 'Name of input file', required=True)
@@ -116,7 +124,7 @@ def find_boundary_points():
         if point.longitude > maxCoordinate.longitude: maxCoordinate.longitude = point.longitude
         if point.longitude < minCoordinate.longitude: minCoordinate.longitude = point.longitude
 
-    print('Max coordinate: {0}, min coordinate: {1}'.format(maxCoordinate, minCoordinate))
+    print('max coordinate: {0}\nmin coordinate: {1}'.format(maxCoordinate, minCoordinate))
 
 def split_area_to_sectors():
     number_of_sectors = math.floor(len(points)/PPR) # number of sectors
@@ -194,21 +202,15 @@ def build_tracks():
 
             # если в секторе уже нет точек, то итоговый трек добавляется в общий список треков
             else:
-                someTracks.append(simple_track)
+                someTracks.append(copy.deepcopy(simple_track))
+                print('track {0}, {1} points'.format(len(someTracks), len(simple_track.points)))
                 simple_track.clear()
 
         # если после обработки сектора в временном трэке что то есть, то добавляем это как отдельный трек
         if not simple_track.is_empty():
-            someTracks.append(simple_track)
+            someTracks.append(copy.deepcopy(simple_track))
+            print('track {0}, {1} points'.format(len(someTracks), len(simple_track)))
             simple_track.clear()
-
-def track_distance(first_track, second_track):
-    first_end_second_start_distance = distance_in_meters( first_track.get_end_point(),   second_track.get_start_point() )
-    second_end_first_start_distance = distance_in_meters( first_track.get_start_point(), second_track.get_end_point()   )
-    return min(first_end_second_start_distance, second_end_first_start_distance)
-
-def is_connectable(first_track, second_track):
-    return track_distance(first_track, second_track) < DISTANCE_THRESHOLD
 
 def connect_tracks():
 
@@ -242,11 +244,6 @@ find_boundary_points() # find boundary points of area
 split_area_to_sectors()
 build_tracks()
 connect_tracks()
-
-#gpxSegment.points.clear()
-#for track in someTracks:
-#    for point in track:
-#        gpxSegment.points.append(gpxpy.gpx.GPXTrackPoint(latitude = point.latitude, longitude = point.longitude))
 
 outFileName = 'result.gpx'
 outFile = open(outFileName, 'w')
