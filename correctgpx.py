@@ -1,162 +1,265 @@
 import argparse
-import gpxpy
 import gpxpy.gpx
 import math
-from geopy.distance import distance
-from gpxpy.gpx import GPXTrackPoint
+import geopy
+from geopy.distance import geodesic
+import gpxpy
 
-# max distance between points in meters
-DISTANCE_THRESHOLD = 1000
-# points per sector
-PPR = 500
+DISTANCE_THRESHOLD = 150 # max distance between points in meters
+PPR = 500 # points per sector
 
-def getDistanceInMeters(p1, p2):
-    return distance( (p1[0], p1[1]), (p2[0], p2[1])).meters
+class Coordinate:
+    def __init__(self, latitude = 0, longitude = 0):
+        self.latitude = latitude
+        self.longitude = longitude
 
-def findBoundaryPoints(points, minCoords, maxCoords):
-    minCoords.latitude = 90
-    minCoords.longitude = 180
-    maxCoords.latitude = -90
-    maxCoords.longitude = -180
-    for point in points:
-        if point[0] > maxCoords.latitude: maxCoords.latitude = point[0]
-        if point[0] < minCoords.latitude: minCoords.latitude = point[0]
-        if point[1] > maxCoords.longitude: maxCoords.longitude = point[1]
-        if point[1] < minCoords.longitude: minCoords.longitude = point[1]
+    def __eq__(self, other):
+        return self.latitude == other.latitude and self.longitude == other.longitude
 
-points = []
+    def __str__(self):
+        return str([self.latitude, self.longitude])
 
-parser = argparse.ArgumentParser(prog = 'GPX_Orderer', description = 'Program %(prog)s sorts  contents of the input file in GPX format')
-parser.add_argument('-f', '--filename', type=str, required=True, help = 'Name of input file')
-parser.add_argument('-t', '--tagname', choices=['wpt', 'trk', 'rte'], required=True, type=str, help = 'Source of points')
-parser.add_argument('-ы', '--size', type=int, default=100, help = 'How much percentages of file must be processed')
+class SimpleTrack:
+    def __init__(self):
+        self.points = []
 
-namespace = parser.parse_args()
+    def __add__(self, other):
+        summary_track = SimpleTrack()
+        if self.get_end_point() == other.get_start_point():
+            summary_track.points.append(self.points)
+            summary_track.points.append(other.points)
+            summary_track.points.remove(self.get_end_point())
+            return summary_track
+        elif other.get_end_point() == self.get_start_point():
+            summary_track.points.append(other.points)
+            summary_track.points.append(self.points)
+            summary_track.points.remove(other.get_end_point())
+            return summary_track
+        elif is_connectable(self, other):
+            summary_track.points.append(self.points)
+            summary_track.points.append(other.points)
+            return summary_track
+        elif is_connectable(other, self):
+            summary_track.points.append(other.points)
+            summary_track.points.append(self.points)
+            return summary_track
 
-gpx_file = open(namespace.filename, 'r')
-gpx = gpxpy.parse(gpx_file)
-print('-------------------------------------------------------------------------------')
-print('{0} waypoints, {1} routes, {2} tracks'.format(len(gpx.tracks), len(gpx.routes), len(gpx.waypoints)))
+    def is_empty(self):
+        return len(self.points) == 0
 
-if namespace.tagname == 'wpt':
-    for waypoint in gpx.waypoints:
-        points.append([waypoint.latitude, waypoint.longitude])
-elif namespace.tagname == 'trk':
-    for track in gpx.tracks:
-        for segment in track.segments:
-            for point in segment.points:
-                points.append([point.latitude, point.longitude])
-elif namespace.tagname == 'rte':
-    for route in gpx.routes:
-        for point in route.points:
-            points.append([point.latitude, point.longitude])
+    def add(self, point):
+        self.points.append(point)
 
-# find boundary points
-minCoords = GPXTrackPoint(90,180)
-maxCoords = GPXTrackPoint(-90,-180)
-findBoundaryPoints(points, minCoords, maxCoords)
-print('Max longitude: {0}, Max latitude: {1};\nMin longitude: {2}, Min latitude: {3};'.format(maxCoords.longitude, maxCoords.latitude, minCoords.longitude, minCoords.latitude))
+    def get_start_point(self):
+            return self.points[0]
+        # if len(self.points) > 0:
+        #     return self.points[0]
+        # else:
+        #     return None
 
-# number of sectors
-numberOfSectors = math.floor(len(points)/PPR)
+    def get_end_point(self):
+        return self.points[-1]
+        # if len(self.points) > 0:
+        #     return self.points[-1]
+        # else:
+        #     return None
 
-width = maxCoords.longitude - minCoords.longitude
-height = maxCoords.latitude - minCoords.latitude
+    def clear(self):
+        self.points.clear()
 
-# numberOfSectors sectors with ordered points
-miniSectors = []
-
-# if "width" > "height", then make split by width (by longitude)
-if width > height:
-    step =  width/numberOfSectors
-    for i in range(numberOfSectors):
-
-        startLongitude = minCoords.longitude + i * step
-        endLongitude = minCoords.longitude + (i + 1) * step
-
-        sector = []
-
-        for point in points:
-            if point[1] >= startLongitude and point[1] < endLongitude:
-                sector.append(point)
-                while point in points:
-                    points.remove(point)
-
-        miniSectors.append(sector)
-# if "width" < "height", then make split by height
-else:
-    step =  height/numberOfSectors
-    for i in range(numberOfSectors):
-
-        startLatitude = minCoords.latitude + i * step
-        endLatitude = minCoords.latitude + (i + 1) * step
-
-        sector = []
-
-        for point in points:
-            if point[0] >= startLatitude and point[0] < endLatitude:
-                sector.append(point)
-                while point in points:
-                    points.remove(point)
-
-        miniSectors.append(sector)
-
-sortedSectors = []
-for miniSector in miniSectors:
-    print('sector {0}, {1} points'.format(miniSectors.index(miniSector), len(miniSector)))
-    # find start point
-    tempSector = miniSector.copy()
-
-    startPoint = miniSector[0]
-    prevPoint = miniSector[0]
-    nearestPoint = miniSector[1]
-    isStartFinded = False
-    isNearestFinded = True
-
-    while isNearestFinded is True:
-
-       isNearestFinded = False
-       tempSector.remove(prevPoint)
-       minDistance = DISTANCE_THRESHOLD
-
-       # finding nearest point
-       for point in tempSector:
-           if getDistanceInMeters(prevPoint, point) < minDistance:
-               minDistance = getDistanceInMeters(prevPoint, point)
-               nearestPoint = point
-               isNearestFinded = True
-
-       # if nearest is finded, prevPoint must be equaled to this point and then this point must be removed
-       if isNearestFinded is True:
-           prevPoint = nearestPoint
-       # if can`t finding nearest point, its meaning, that we find start point
-       else:
-           startPoint = prevPoint
-
+# ----------- variables to write coordinates in out file -----------
 outGpx = gpxpy.gpx.GPX()
+gpxTrack = gpxpy.gpx.GPXTrack()
+outGpx.tracks.append(gpxTrack)
+gpxSegment = gpxpy.gpx.GPXTrackSegment()
+gpxTrack.segments.append(gpxSegment)
 
-gpx_track = gpxpy.gpx.GPXTrack()
-outGpx.tracks.append(gpx_track)
+# ------------ variables ------------
+points = [] # container to all point from input file
+minCoordinate, maxCoordinate = Coordinate(90, 180), Coordinate(-90, -180)
+splittingSectors = [] # sectors with ordered points
+someTracks = [] # непрерывные треки
 
-gpx_segment = gpxpy.gpx.GPXTrackSegment()
-gpx_track.segments.append(gpx_segment)
+def distance_in_meters(first_point, second_point):
+    return geodesic((first_point.latitude, first_point.longitude), (second_point.latitude, second_point.longitude)).meters
 
-for miniSector in miniSectors:
-    gpx_segment.points.clear()
-    for point in miniSector:
-        gpx_segment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=point[0], longitude=point[1]))
+def get_parser():
+    new_parser = argparse.ArgumentParser(prog = 'GPX_Orderer', description = 'Program %(prog)s sorts  contents of the input file in GPX format')
+    new_parser.add_argument('-f', '--filename', type=str, help = 'Name of input file', required=True)
+    new_parser.add_argument('-t', '--tagname',  type=str, help = 'Source of points'  , choices=['wpt', 'trk', 'rte'], required=True)
+    new_parser.add_argument('-s', '--size',     type=int, help = 'How much percentages of file must be processed', default=100)
+    return new_parser.parse_args()
 
-    # write segments to file
-    outFile = open('segment'+str(miniSectors.index(miniSector)), 'w')
-    outFile.write(outGpx.to_xml())
-    outFile.close()
+def parse_input_file():
+    gpx_file = open(parser.filename, 'r')
+    gpx = gpxpy.parse(gpx_file)
+    print('-------------------------------------------------------------------------------')
+    print('{0} waypoints, {1} routes, {2} tracks'.format(len(gpx.tracks), len(gpx.routes), len(gpx.waypoints)))
+    if parser.tagname == 'wpt':
+        for waypoint in gpx.waypoints:
+            points.append(Coordinate(waypoint.latitude, waypoint.longitude))
+    elif parser.tagname == 'trk':
+        for track in gpx.tracks:
+            for segment in track.segments:
+                for point in segment.points:
+                    points.append(Coordinate(point.latitude, point.longitude))
+    elif parser.tagname == 'rte':
+        for route in gpx.routes:
+            for point in route.points:
+                points.append(Coordinate(point.latitude, point.longitude))
+    gpx_file.close()
 
-for sector in sortedSectors:
-    for point in sector:
-        gpx_segment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=point[0], longitude=point[1]))
+def find_boundary_points():
+    for point in points:
+        if point.latitude  > maxCoordinate.latitude:  maxCoordinate.latitude  = point.latitude
+        if point.latitude  < minCoordinate.latitude:  minCoordinate.latitude  = point.latitude
+        if point.longitude > maxCoordinate.longitude: maxCoordinate.longitude = point.longitude
+        if point.longitude < minCoordinate.longitude: minCoordinate.longitude = point.longitude
 
-outFileName = namespace.filename.replace('.gpx', '') + '_corrected.gpx'
+    print('Max coordinate: {0}, min coordinate: {1}'.format(maxCoordinate, minCoordinate))
+
+def split_area_to_sectors():
+    number_of_sectors = math.floor(len(points)/PPR) # number of sectors
+
+    width = maxCoordinate.longitude - minCoordinate.longitude
+    height = maxCoordinate.latitude - minCoordinate.latitude
+
+    # if "width" > "height", then make split by width (by longitude)
+    if width > height:
+        longitude_step = width / number_of_sectors
+        for i in range(number_of_sectors):
+
+            start_longitude = minCoordinate.longitude + i * longitude_step
+            end_longitude = minCoordinate.longitude + (i + 1) * longitude_step
+
+            sector = []
+
+            for point in points:
+                if point.longitude >= start_longitude and point.longitude < end_longitude: # -------------------------------------------------------------- FIX IT ---------------------------------------------------------------------------------------------
+                #if point.longitude in (start_longitude, end_longitude):
+                    sector.append(point)
+                    while point in points:
+                        points.remove(point)
+
+            splittingSectors.append(sector)
+    # if "width" < "height", then make split by height
+    else:
+        latitude_step = height / number_of_sectors
+        for i in range(number_of_sectors):
+
+            start_latitude = minCoordinate.latitude + i * latitude_step
+            end_latitude = minCoordinate.latitude + (i + 1) * latitude_step
+
+            sector = []
+
+            for point in points:
+                if point.latitude in (start_latitude, end_latitude): # point.latitude >= startLatitude and point.latitude < endLatitude:
+                    sector.append(point)
+                    while point in points:
+                        points.remove(point)
+
+            splittingSectors.append(sector)
+
+def build_tracks():
+
+    someTracks.clear()
+    simple_track = SimpleTrack()
+
+    for sector in splittingSectors:
+
+        print('sector {0}'.format(splittingSectors.index(sector)))
+
+        while len(sector) > 0:
+            # поиск ближайшей точки
+            global nearest_point
+            global prev_point
+            prev_point = sector[0]
+            simple_track.add(prev_point)
+            sector.remove(prev_point)
+
+            # если в секторе есть другие точки, то пытаемся их соединить
+            if len(sector) > 0:
+
+                nearest_point = sector[0]
+                min_points_distance = min(distance_in_meters(prev_point, nearest_point), DISTANCE_THRESHOLD)
+
+                for point in sector:
+                    if point is not prev_point and distance_in_meters(point, prev_point) < min_points_distance:
+                        min_points_distance = distance_in_meters(point, prev_point)
+                        nearest_point = point
+
+                # если расстояние до ближайшей точки меньше порога, то добавляем точку в трэк
+                if min_points_distance < DISTANCE_THRESHOLD:
+                    prev_point = nearest_point
+
+            # если в секторе уже нет точек, то итоговый трек добавляется в общий список треков
+            else:
+                someTracks.append(simple_track)
+                simple_track.clear()
+
+        # если после обработки сектора в временном трэке что то есть, то добавляем это как отдельный трек
+        if not simple_track.is_empty():
+            someTracks.append(simple_track)
+            simple_track.clear()
+
+def track_distance(first_track, second_track):
+    first_end_second_start_distance = distance_in_meters( first_track.get_end_point(),   second_track.get_start_point() )
+    second_end_first_start_distance = distance_in_meters( first_track.get_start_point(), second_track.get_end_point()   )
+    return min(first_end_second_start_distance, second_end_first_start_distance)
+
+def is_connectable(first_track, second_track):
+    return track_distance(first_track, second_track) < DISTANCE_THRESHOLD
+
+def connect_tracks():
+
+    for track in someTracks:
+        print('track {0} has {1} points'.format(someTracks.index(track), len(track.points)))
+
+    while True:
+
+        print('len of someTracks = ', len(someTracks))
+
+        if len(someTracks) > 1:
+            prev_track = someTracks[0]
+            nearest_track = someTracks[1]
+            min_distance = track_distance(prev_track, nearest_track)
+
+            for track in someTracks:
+                if track_distance(track, prev_track) < min_distance and track is not prev_track:
+                    min_distance = track_distance(track, prev_track)
+                    nearest_track = track
+
+            someTracks.remove(prev_track)
+            someTracks.remove(nearest_track)
+            someTracks.append(prev_track + nearest_track)
+        else:
+            break
+
+# ------------ work ------------
+parser = get_parser() # create parser to program input keys
+parse_input_file() # open *.gpx file and extract current info
+find_boundary_points() # find boundary points of area
+split_area_to_sectors()
+build_tracks()
+connect_tracks()
+
+#gpxSegment.points.clear()
+#for track in someTracks:
+#    for point in track:
+#        gpxSegment.points.append(gpxpy.gpx.GPXTrackPoint(latitude = point.latitude, longitude = point.longitude))
+
+outFileName = 'result.gpx'
 outFile = open(outFileName, 'w')
 outFile.write(outGpx.to_xml())
 outFile.close()
 print('Success! Recovered route saved in ', outFileName)
+
+# for sector in sortedSectors:
+#     for point in sector:
+#         gpxSegment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=point[0], longitude=point[1]))
+#
+# outFileName = namespace.filename.replace('.gpx', '') + '_corrected.gpx'
+# outFile = open(outFileName, 'w')
+# outFile.write(outGpx.to_xml())
+# outFile.close()
+# print('Success! Recovered route saved in ', outFileName)
