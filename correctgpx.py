@@ -26,22 +26,22 @@ class SimpleTrack:
     def __add__(self, other):
         summary_track = SimpleTrack()
         if self.get_end_point() == other.get_start_point():
-            summary_track.points.append(self.points)
-            summary_track.points.append(other.points)
+            summary_track.points.extend(self.points)
+            summary_track.points.extend(other.points)
             summary_track.points.remove(self.get_end_point())
             return summary_track
         elif other.get_end_point() == self.get_start_point():
-            summary_track.points.append(other.points)
-            summary_track.points.append(self.points)
+            summary_track.points.extend(other.points)
+            summary_track.points.extend(self.points)
             summary_track.points.remove(other.get_end_point())
             return summary_track
         elif is_connectable(self, other):
-            summary_track.points.append(self.points)
-            summary_track.points.append(other.points)
+            summary_track.points.extend(self.points)
+            summary_track.points.extend(other.points)
             return summary_track
         elif is_connectable(other, self):
-            summary_track.points.append(other.points)
-            summary_track.points.append(self.points)
+            summary_track.points.extend(other.points)
+            summary_track.points.extend(self.points)
             return summary_track
 
     def is_empty(self):
@@ -51,18 +51,16 @@ class SimpleTrack:
         self.points.append(point)
 
     def get_start_point(self):
+        if len(self.points) > 0:
             return self.points[0]
-        # if len(self.points) > 0:
-        #     return self.points[0]
-        # else:
-        #     return None
+        else:
+            return None
 
     def get_end_point(self):
-        return self.points[-1]
-        # if len(self.points) > 0:
-        #     return self.points[-1]
-        # else:
-        #     return None
+        if len(self.points) > 0:
+            return self.points[-1]
+        else:
+            return None
 
     def clear(self):
         self.points.clear()
@@ -143,8 +141,7 @@ def split_area_to_sectors():
             sector = []
 
             for point in points:
-                if point.longitude >= start_longitude and point.longitude < end_longitude: # -------------------------------------------------------------- FIX IT ---------------------------------------------------------------------------------------------
-                #if point.longitude in (start_longitude, end_longitude):
+                if start_longitude <= point.longitude < end_longitude:
                     sector.append(point)
                     while point in points:
                         points.remove(point)
@@ -161,7 +158,7 @@ def split_area_to_sectors():
             sector = []
 
             for point in points:
-                if point.latitude in (start_latitude, end_latitude): # point.latitude >= startLatitude and point.latitude < endLatitude:
+                if start_latitude <= point.latitude < end_latitude:
                     sector.append(point)
                     while point in points:
                         points.remove(point)
@@ -251,12 +248,3 @@ outFile.write(outGpx.to_xml())
 outFile.close()
 print('Success! Recovered route saved in ', outFileName)
 
-# for sector in sortedSectors:
-#     for point in sector:
-#         gpxSegment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=point[0], longitude=point[1]))
-#
-# outFileName = namespace.filename.replace('.gpx', '') + '_corrected.gpx'
-# outFile = open(outFileName, 'w')
-# outFile.write(outGpx.to_xml())
-# outFile.close()
-# print('Success! Recovered route saved in ', outFileName)
