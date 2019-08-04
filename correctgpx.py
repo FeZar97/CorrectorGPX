@@ -6,7 +6,14 @@ from geopy.distance import geodesic
 import gpxpy
 
 DISTANCE_THRESHOLD = 150 # max distance between points in meters
-PPR = 500 # points per sector
+PPR = 50 # points per sector
+
+# ----------- variables to write coordinates in out file -----------
+outGpx = gpxpy.gpx.GPX()
+gpxTrack = gpxpy.gpx.GPXTrack()
+outGpx.tracks.append(gpxTrack)
+gpxSegment = gpxpy.gpx.GPXTrackSegment()
+gpxTrack.segments.append(gpxSegment)
 
 class Coordinate:
     def __init__(self, latitude = 0, longitude = 0):
@@ -22,68 +29,66 @@ class Coordinate:
 class SimpleTrack:
     def __init__(self):
         self.points = []
-
-    def __add__(self, other):
-        summary_track = SimpleTrack()
-        if self.get_end_point() == other.get_start_point():
-            summary_track.points.extend(self.points)
-            summary_track.points.extend(other.points)
-            summary_track.points.remove(self.get_end_point())
-            return summary_track
-        elif other.get_end_point() == self.get_start_point():
-            summary_track.points.extend(other.points)
-            summary_track.points.extend(self.points)
-            summary_track.points.remove(other.get_end_point())
-            return summary_track
-        elif is_connectable(self, other):
-            summary_track.points.extend(self.points)
-            summary_track.points.extend(other.points)
-            return summary_track
-        elif is_connectable(other, self):
-            summary_track.points.extend(other.points)
-            summary_track.points.extend(self.points)
-            return summary_track
+        self.first_tip = Coordinate()
+        self.second_tip = Coordinate()
+        self.len = 0
+        self.max_coord = Coordinate(-90, -180)
+        self.min_coord = Coordinate(90, 180)
 
     def is_empty(self):
         return len(self.points) == 0
 
-    def add(self, point):
-        self.points.append(point)
-
-    def get_start_point(self):
-        if len(self.points) > 0:
-            return self.points[0]
+    def add_point(self, point):
+        if self.is_empty():
+            self.points.append(point)
+            self.first_tip = point
+            self.second_tip = point
+            self.max_coord = point
+            self.min_coord = point
+            self.len = 0
+        elif distance_in_meters(point, self.first_tip) < distance_in_meters(point, self.second_tip):
+            self.points.insert(0, point)
+            self.len += distance_in_meters(point, self.first_tip)
+            self.first_tip = point
         else:
-            return None
-
-    def get_end_point(self):
-        if len(self.points) > 0:
-            return self.points[-1]
-        else:
-            return None
+            self.points.insert(-1, point)
+            self.len += distance_in_meters(point, self.second_tip)
+            self.second_tip = point
+        if point.latitude > self.max_coord.latitude: self.max_coord.latitude = point.latitude
+        if point.latitude < self.min_coord.latitude: self.min_coord.latitude = point.latitude
+        if point.longitude > self.max_coord.longitude: self.max_coord.longitude = point.longitude
+        if point.longitude < self.min_coord.longitude: self.min_coord.longitude = point.longitude
 
     def clear(self):
         self.points.clear()
+        self.first_tip = Coordinate()
+        self.second_tip = Coordinate()
+        self.len = 0
 
-# ----------- variables to write coordinates in out file -----------
-outGpx = gpxpy.gpx.GPX()
-gpxTrack = gpxpy.gpx.GPXTrack()
-outGpx.tracks.append(gpxTrack)
-gpxSegment = gpxpy.gpx.GPXTrackSegment()
-gpxTrack.segments.append(gpxSegment)
+    def print_to_file(self, idx):
+        gpxSegment.points.clear()
+        for point in self.points:
+            gpxSegment.points.append(gpxpy.gpx.GPXTrackPoint(latitude = point.latitude, longitude = point.longitude))
+        out_file_name = 'track_' + str(idx) + '.gpx'
+        out_file = open(out_file_name, 'w')
+        out_file.write(outGpx.to_xml())
+        out_file.close()
+
+    def add_track(self, track):
+        # сначала надо найти общие граничные точки
 
 # ------------ variables ------------
 points = [] # container to all point from input file
 minCoordinate, maxCoordinate = Coordinate(90, 180), Coordinate(-90, -180)
-splittingSectors = [] # sectors with ordered points
+splittingSectors = [] # sectors with not ordered points
 someTracks = [] # непрерывные треки
 
 def distance_in_meters(first_point, second_point):
     return geodesic((first_point.latitude, first_point.longitude), (second_point.latitude, second_point.longitude)).meters
 
 def track_distance(first_track, second_track):
-    first_end_second_start_distance = distance_in_meters( first_track.get_end_point(),   second_track.get_start_point() )
-    second_end_first_start_distance = distance_in_meters( first_track.get_start_point(), second_track.get_end_point()   )
+    first_end_second_start_distance = distance_in_meters( first_track.second_tip, second_track.first_tip  )
+    second_end_first_start_distance = distance_in_meters( first_track.first_tip,  second_track.second_tip )
     return min(first_end_second_start_distance, second_end_first_start_distance)
 
 def is_connectable(first_track, second_track):
@@ -122,9 +127,10 @@ def find_boundary_points():
         if point.longitude > maxCoordinate.longitude: maxCoordinate.longitude = point.longitude
         if point.longitude < minCoordinate.longitude: minCoordinate.longitude = point.longitude
 
-    print('max coordinate: {0}\nmin coordinate: {1}'.format(maxCoordinate, minCoordinate))
-
 def split_area_to_sectors():
+
+    find_boundary_points() # find boundary points of area
+
     number_of_sectors = math.floor(len(points)/PPR) # number of sectors
 
     width = maxCoordinate.longitude - minCoordinate.longitude
@@ -172,79 +178,98 @@ def build_tracks():
 
     for sector in splittingSectors:
 
+        simple_track.clear()
+
         print('sector {0}'.format(splittingSectors.index(sector)))
 
         while len(sector) > 0:
-            # поиск ближайшей точки
-            global nearest_point
-            global prev_point
-            prev_point = sector[0]
-            simple_track.add(prev_point)
-            sector.remove(prev_point)
 
-            # если в секторе есть другие точки, то пытаемся их соединить
-            if len(sector) > 0:
-
-                nearest_point = sector[0]
-                min_points_distance = min(distance_in_meters(prev_point, nearest_point), DISTANCE_THRESHOLD)
+            if simple_track.is_empty():
+                simple_track.add_point(sector[0])
+                del sector[0]
+            else:
+                nearest_point_to_first_tip = sector[0]
+                nearest_point_to_second_tip = sector[0]
 
                 for point in sector:
-                    if point is not prev_point and distance_in_meters(point, prev_point) < min_points_distance:
-                        min_points_distance = distance_in_meters(point, prev_point)
-                        nearest_point = point
+                    # если эта точка ближе всего к первому концу трека, то запоминаем ее как nearest_point_to_first_tip
+                    if distance_in_meters(point, simple_track.first_tip) < distance_in_meters(nearest_point_to_first_tip, simple_track.first_tip):
+                        nearest_point_to_first_tip = point
+                    # если эта точка ближе всего к второму концу трека, то запоминаем ее как nearest_point_to_second_tip
+                    if distance_in_meters(point, simple_track.second_tip) < distance_in_meters(nearest_point_to_second_tip, simple_track.second_tip):
+                        nearest_point_to_second_tip = point
 
-                # если расстояние до ближайшей точки меньше порога, то добавляем точку в трэк
-                if min_points_distance < DISTANCE_THRESHOLD:
-                    prev_point = nearest_point
+                # если обе точки разные, то можно их добавить в трек
+                if nearest_point_to_first_tip is not nearest_point_to_second_tip:
+                    simple_track.add_point(nearest_point_to_first_tip)
+                    sector.remove(nearest_point_to_first_tip)
+                    simple_track.add_point(nearest_point_to_second_tip)
+                    sector.remove(nearest_point_to_second_tip)
+                # если обе переменные указывают на одну и ту же точку, то добавляем только один раз
+                else:
+                    simple_track.add_point(nearest_point_to_first_tip)
+                    sector.remove(nearest_point_to_first_tip)
 
-            # если в секторе уже нет точек, то итоговый трек добавляется в общий список треков
-            else:
-                someTracks.append(copy.deepcopy(simple_track))
-                print('track {0}, {1} points'.format(len(someTracks), len(simple_track.points)))
-                simple_track.clear()
+            print('{0} points left'.format(len(sector)))
 
-        # если после обработки сектора в временном трэке что то есть, то добавляем это как отдельный трек
-        if not simple_track.is_empty():
-            someTracks.append(copy.deepcopy(simple_track))
-            print('track {0}, {1} points'.format(len(someTracks), len(simple_track)))
-            simple_track.clear()
+        someTracks.append(copy.deepcopy(simple_track))
+        simple_track.clear()
 
-def connect_tracks():
 
-    for track in someTracks:
-        print('track {0} has {1} points'.format(someTracks.index(track), len(track.points)))
+# def connect_tracks():
+#
+#     for track in someTracks:
+#         print('track {0} has {1} points'.format(someTracks.index(track), len(track.points)))
+#
+#     while True:
+#
+#         print('len of someTracks = ', len(someTracks))
+#
+#         if len(someTracks) > 1:
+#             prev_track = someTracks[0]
+#             nearest_track = someTracks[1]
+#             min_distance = track_distance(prev_track, nearest_track)
+#
+#             for track in someTracks:
+#                 if track_distance(track, prev_track) < min_distance and track is not prev_track:
+#                     min_distance = track_distance(track, prev_track)
+#                     nearest_track = track
+#
+#             someTracks.remove(prev_track)
+#             someTracks.remove(nearest_track)
+#             someTracks.append(prev_track + nearest_track)
+#         else:
+#             break
 
-    while True:
-
-        print('len of someTracks = ', len(someTracks))
-
-        if len(someTracks) > 1:
-            prev_track = someTracks[0]
-            nearest_track = someTracks[1]
-            min_distance = track_distance(prev_track, nearest_track)
-
-            for track in someTracks:
-                if track_distance(track, prev_track) < min_distance and track is not prev_track:
-                    min_distance = track_distance(track, prev_track)
-                    nearest_track = track
-
-            someTracks.remove(prev_track)
-            someTracks.remove(nearest_track)
-            someTracks.append(prev_track + nearest_track)
-        else:
-            break
+# def connect_tracks(first_track, second_track):
+#
+#     summary_track = SimpleTrack()
+#
+#     if first_track.get_end_point() == second_track.get_start_point():
+#         summary_track.points.extend(first_track.points)
+#         summary_track.points.extend(second_track.points)
+#         summary_track.points.remove(first_track.get_end_point())
+#         return summary_track
+#     elif second_track.get_end_point() == first_track.get_start_point():
+#         summary_track.points.extend(second_track.points)
+#         summary_track.points.extend(first_track.points)
+#         summary_track.points.remove(second_track.get_end_point())
+#         return summary_track
+#     elif is_connectable(first_track, second_track):
+#         summary_track.points.extend(first_track.points)
+#         summary_track.points.extend(second_track.points)
+#         return summary_track
+#     elif is_connectable(second_track, first_track):
+#         summary_track.points.extend(second_track.points)
+#         summary_track.points.extend(first_track.points)
+#         return summary_track
 
 # ------------ work ------------
 parser = get_parser() # create parser to program input keys
 parse_input_file() # open *.gpx file and extract current info
-find_boundary_points() # find boundary points of area
 split_area_to_sectors()
 build_tracks()
-connect_tracks()
+# connect_tracks()
 
-outFileName = 'result.gpx'
-outFile = open(outFileName, 'w')
-outFile.write(outGpx.to_xml())
-outFile.close()
-print('Success! Recovered route saved in ', outFileName)
-
+for track in someTracks:
+    track.print_to_file(someTracks.index(track))
